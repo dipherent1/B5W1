@@ -175,3 +175,7 @@ cython_debug/
 
 .github/
 .vscode/
+
+*.csv#
+*.csv
+*.zip
