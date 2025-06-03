@@ -12,47 +12,42 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-
-    - name: Set up Python
+    
+    - name: Set up Python 3.10
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'  # TA-Lib works best with 3.8-3.10
-
-    - name: Install TA-Lib C library
+        python-version: '3.10'
+        
+    - name: Install TA-Lib system dependencies
       run: |
         sudo apt-get update
-        # libtool and autoconf might be needed if configure script needs regeneration,
-        # good to have them for build-from-source scenarios.
-        sudo apt-get install -y build-essential wget libtool autoconf
-        wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+        sudo apt-get install -y build-essential wget
+        wget https://downloads.sourceforge.net/project/ta-lib/ta-lib/0.4.0/ta-lib-0.4.0-src.tar.gz
         tar -xzf ta-lib-0.4.0-src.tar.gz
         cd ta-lib/
-        # The --prefix=/usr ensures it installs to standard system locations
-        # /usr/lib for libraries, /usr/include for headers
         ./configure --prefix=/usr
-        make
+        make -j$(nproc)
         sudo make install
+        sudo ldconfig  # Refresh library cache
         cd ..
         rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
-        # Crucial step: Update the dynamic linker cache
-        sudo ldconfig
-
-    - name: Install Python dependencies
-      # Set environment variables to explicitly tell the ta-lib Python package where to find the C library
-      # TA_INCLUDE_PATH should point to the directory containing the 'ta-lib' subdir (e.g., /usr/include)
-      # TA_LIBRARY_PATH should point to the directory containing libta_lib.so (e.g., /usr/lib)
-      env:
-        TA_INCLUDE_PATH: /usr/include
-        TA_LIBRARY_PATH: /usr/lib
-      run: |
-        python -m pip install --upgrade pip
-        pip install wheel  # Ensure wheel is available
-        pip install -r requirements.txt
-
+        
     - name: Verify TA-Lib installation
       run: |
+        ldconfig -p | grep ta_lib  # Check library is found
+        ls -lh /usr/lib/libta_lib*  # Verify library files
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install wheel numpy  # Install numpy first as TA-Lib depends on it
+        TA_LIBRARY_PATH=/usr/lib TA_INCLUDE_PATH=/usr/include pip install ta-lib
+        pip install -r requirements.txt
+        
+    - name: Verify Python can import TA-Lib
+      run: |
         python -c "import talib; print('TA-Lib version:', talib.__version__)"
-
+        
     - name: Run tests
       run: |
         python -m pytest
