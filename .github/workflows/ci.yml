@@ -21,33 +21,58 @@ jobs:
     - name: Install TA-Lib C library
       run: |
         sudo apt-get update
+        # build-essential, wget, autoconf, libtool are common for source builds.
+        # pkg-config can help build systems find libraries.
         sudo apt-get install -y build-essential wget autoconf libtool pkg-config
         wget https://downloads.sourceforge.net/project/ta-lib/ta-lib/0.4.0/ta-lib-0.4.0-src.tar.gz
         tar -xzf ta-lib-0.4.0-src.tar.gz
         cd ta-lib/
+        # Configure to install into /usr (libs to /usr/lib, headers to /usr/include)
         ./configure --prefix=/usr
+        # Make serially to avoid potential race conditions in TA-Lib's Makefile
         make
         sudo make install
+        # Update the dynamic linker cache so the system can find libta_lib.so
         sudo ldconfig
         cd ..
         rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
 
-    - name: Debug TA-Lib installation
+    - name: Verify TA-Lib C library installation
       run: |
-        echo "--- Checking TA-Lib installation ---"
+        echo "--- Checking ldconfig cache for ta_lib ---"
+        ldconfig -p | grep ta_lib
+        echo "--- Verifying library files in /usr/lib ---"
         ls -lAh /usr/lib/libta_lib*
-        ls -lAh /usr/include/ta-lib/
-        ls -lAh /usr/lib/pkgconfig/ta-lib.pc || echo "ta-lib.pc not found, check TA_INCLUDE_PATH and TA_LIBRARY_PATH."
+        echo "--- Verifying header files in /usr/include/ta-lib ---"
+        # These files should exist if installation was correct
+        ls -lAh /usr/include/ta-lib/ta_libc.h
+        ls -lAh /usr/include/ta-lib/ta_defs.h
+        ls -lAh /usr/include/ta-lib/ta_common.h
+        echo "--- Checking for ta-lib.pc file (used by pkg-config) ---"
+        ls -lAh /usr/lib/pkgconfig/ta-lib.pc || echo "ta-lib.pc not found, this is okay if TA_..._PATH vars are used."
+        # Test if pkg-config can find it (optional, but good check)
+        pkg-config --libs --cflags ta-lib || echo "pkg-config could not find ta-lib (may rely on TA_..._PATH vars)."
 
     - name: Install Python dependencies
+      # Set environment variables for the entire step.
+      # TA_INCLUDE_PATH must point to the directory *containing* ta_defs.h, ta_common.h, etc.
+      # TA_LIBRARY_PATH must point to the directory *containing* libta_lib.so.
       env:
         TA_INCLUDE_PATH: /usr/include/ta-lib
         TA_LIBRARY_PATH: /usr/lib
       run: |
         python -m pip install --upgrade pip
         pip install wheel
+        # Pin NumPy to a 1.x version for better compatibility with older C extensions like TA-Lib's Python wrapper.
+        # NumPy 2.0 had ABI changes that can break extensions not specifically updated.
         pip install "numpy<2.0"
+        # Assuming ta-lib is listed in requirements.txt, pip will attempt to build it here.
+        # The TA_INCLUDE_PATH and TA_LIBRARY_PATH environment variables will guide its build process.
         pip install -r requirements.txt
+
+    - name: Verify Python can import TA-Lib
+      run: |
+        python -c "import talib; print('TA-Lib version:', talib.__version__)"
 
     - name: Run tests
       run: |
