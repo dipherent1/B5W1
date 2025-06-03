@@ -1,27 +1,41 @@
-name: Windows CI/CD Pipeline
+name: Ubuntu CI/CD Pipeline
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+on: [push, pull_request]
 
 jobs:
-  build:
-    runs-on: windows-latest
+  test:
+    runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12.10'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run tests
-        run: python --version
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'  # Most stable for TA-Lib
+        
+    - name: Install TA-Lib PROPERLY
+      run: |
+        sudo apt-get update
+        # Install both runtime AND development packages
+        sudo apt-get install -y libta-lib-dev ta-lib
+        # Verify library location
+        ls -la /usr/lib/x86_64-linux-gnu/libta_lib*
+        # Create symlink to standard location
+        sudo ln -s /usr/lib/x86_64-linux-gnu/libta_lib.so.0 /usr/lib/libta_lib.so
+        sudo ldconfig
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install numpy  # Must come before TA-Lib
+        # Explicitly tell pip where to find the library
+        TA_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu \
+        TA_INCLUDE_PATH=/usr/include \
+        pip install ta-lib
+        pip install -r requirements.txt
+        
+    - name: Verify installation
+      run: |
+        python -c "import talib; print('TA-Lib version:', talib.__version__)"
+        ldd $(python -c "import talib; print(talib.__file__)") | grep ta_lib
