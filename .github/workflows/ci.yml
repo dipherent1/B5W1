@@ -21,18 +21,13 @@ jobs:
     - name: Install TA-Lib C library
       run: |
         sudo apt-get update
-        # build-essential, wget, autoconf, libtool are common for source builds.
-        # pkg-config can help build systems find libraries.
         sudo apt-get install -y build-essential wget autoconf libtool pkg-config
         wget https://downloads.sourceforge.net/project/ta-lib/ta-lib/0.4.0/ta-lib-0.4.0-src.tar.gz
         tar -xzf ta-lib-0.4.0-src.tar.gz
         cd ta-lib/
-        # Configure to install into /usr (libs to /usr/lib, headers to /usr/include)
         ./configure --prefix=/usr
-        # Make serially to avoid potential race conditions in TA-Lib's Makefile
         make
         sudo make install
-        # Update the dynamic linker cache so the system can find libta_lib.so
         sudo ldconfig
         cd ..
         rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
@@ -63,11 +58,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install wheel
-        # Pin NumPy to a 1.x version for better compatibility with older C extensions like TA-Lib's Python wrapper.
-        # NumPy 2.0 had ABI changes that can break extensions not specifically updated.
         pip install "numpy<2.0"
-        # Assuming ta-lib is listed in requirements.txt, pip will attempt to build it here.
-        # The TA_INCLUDE_PATH and TA_LIBRARY_PATH environment variables will guide its build process.
         pip install -r requirements.txt
 
     - name: Verify Python can import TA-Lib
